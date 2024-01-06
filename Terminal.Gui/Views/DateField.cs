@@ -10,7 +10,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 
-namespace Terminal.Gui; 
+namespace Terminal.Gui;
 
 /// <summary>
 ///   Simple Date editing <see cref="View"/>
@@ -21,8 +21,8 @@ namespace Terminal.Gui;
 public class DateField : TextField {
 	DateTime date;
 	bool isShort;
-	int longFieldLen = 10;
-	int shortFieldLen = 8;
+	readonly int longFieldLen = 10;
+	readonly int shortFieldLen = 8;
 	string sepChar;
 	string longFormat;
 	string shortFormat;
@@ -129,12 +129,15 @@ public class DateField : TextField {
 
 	void DateField_Changed (object sender, TextChangedEventArgs e)
 	{
-		try {
-			if (!DateTime.TryParseExact (GetDate (Text), GetInvarianteFormat (), CultureInfo.CurrentCulture, DateTimeStyles.None, out var result)) {
-				Text = e.OldValue;
+		//string textDate = " " + date.Date.ToString (GetInvarianteFormat ());
+	}
+
+	private string TextDate {
+		get => date.ToString (format);
+		set {
+			if (DateTime.TryParseExact (value, format, CultureInfo.CurrentCulture, DateTimeStyles.None, out DateTime dt)) {
+				Text = value;
 			}
-		} catch (Exception) {
-			Text = e.OldValue;
 		}
 	}
 
@@ -144,13 +147,13 @@ public class DateField : TextField {
 	{
 		string [] frm = lf.Split (sepChar);
 		for (int i = 0; i < frm.Length; i++) {
-			if (frm [i].Contains ("M") && frm [i].GetRuneCount () < 2) {
+			if (frm [i].Contains ('M') && frm [i].GetRuneCount () < 2) {
 				lf = lf.Replace ("M", "MM");
 			}
-			if (frm [i].Contains ("d") && frm [i].GetRuneCount () < 2) {
+			if (frm [i].Contains ('d') && frm [i].GetRuneCount () < 2) {
 				lf = lf.Replace ("d", "dd");
 			}
-			if (frm [i].Contains ("y") && frm [i].GetRuneCount () < 4) {
+			if (frm [i].Contains ('y') && frm [i].GetRuneCount () < 4) {
 				lf = lf.Replace ("yy", "yyyy");
 			}
 		}
@@ -173,7 +176,7 @@ public class DateField : TextField {
 
 			var oldData = date;
 			date = value;
-			Text = value.ToString (format);
+			TextDate = value.ToString (format);
 			var args = new DateTimeEventArgs<DateTime> (oldData, value, format);
 			if (oldData != value) {
 				OnDateChanged (args);
@@ -197,7 +200,9 @@ public class DateField : TextField {
 			if (ro) {
 				ReadOnly = false;
 			}
-			SetText (Text);
+			if (date.Year > 99) {
+				SetText (Text);
+			}
 			ReadOnly = ro;
 			SetNeedsDisplay ();
 		}
@@ -226,107 +231,112 @@ public class DateField : TextField {
 			return false;
 		}
 
-		string [] vals = text.Split (sepChar);
-		string [] frm = format.Split (sepChar);
-		bool isValidDate = true;
-		int idx = GetFormatIndex (frm, "y");
-		int year = Int32.Parse (vals [idx]);
-		int month;
-		int day;
-		idx = GetFormatIndex (frm, "M");
-		if (Int32.Parse (vals [idx]) < 1) {
-			isValidDate = false;
-			month = 1;
-			vals [idx] = "1";
-		} else if (Int32.Parse (vals [idx]) > 12) {
-			isValidDate = false;
-			month = 12;
-			vals [idx] = "12";
-		} else {
-			month = Int32.Parse (vals [idx]);
-		}
-		idx = GetFormatIndex (frm, "d");
-		if (Int32.Parse (vals [idx]) < 1) {
-			isValidDate = false;
-			day = 1;
-			vals [idx] = "1";
-		} else if (Int32.Parse (vals [idx]) > 31) {
-			isValidDate = false;
-			day = DateTime.DaysInMonth (year, month);
-			vals [idx] = day.ToString ();
-		} else {
-			day = Int32.Parse (vals [idx]);
-		}
-		string d = GetDate (month, day, year, frm);
+		var date = ParseDate (text);
+		string formattedDate = FormatDate (date);
 
-		if (!DateTime.TryParseExact (d, format, CultureInfo.CurrentCulture, DateTimeStyles.None, out var result) ||
-		!isValidDate) {
+		bool canBeParsed = DateTime.TryParseExact (formattedDate, format,
+					    CultureInfo.CurrentCulture, DateTimeStyles.None, out var result);
+		if (!canBeParsed) {
 			return false;
 		}
+
 		Date = result;
 		return true;
 	}
 
-	string GetDate (int month, int day, int year, string [] fm)
+	private string FormatDate (DateTime date) => date.ToString (format);
+	private DateTime ParseDate (string text)
 	{
-		string date = " ";
-		for (int i = 0; i < fm.Length; i++) {
-			if (fm [i].Contains ("M")) {
-				date += $"{month,2:00}";
-			} else if (fm [i].Contains ("d")) {
-				date += $"{day,2:00}";
-			} else {
-				if (!isShort && year.ToString ().Length == 2) {
-					string y = DateTime.Now.Year.ToString ();
-					date += y.Substring (0, 2) + year.ToString ();
-				} else if (isShort && year.ToString ().Length == 4) {
-					date += $"{year.ToString ().Substring (2, 2)}";
-				} else {
-					date += $"{year,2:00}";
-				}
-			}
-			if (i < 2) {
-				date += $"{sepChar}";
-			}
+		var values = text.Split (sepChar);
+		if (values.Length != 3) {
+			throw new ArgumentException ("Invalid date format");
 		}
-		return date;
+		int year = ValidateYear (values [2], out bool isValidDate);
+		int month = ValidateMonth (values [0], out isValidDate);
+		int day = ValidateDay (values [1], year, month, out isValidDate);
+		if (!isValidDate) {
+			throw new ArgumentException ("Invalid date format");
+		}
+		return new DateTime (year, month, day);
 	}
 
-	string GetDate (string text)
+	private int ValidateDay (string dayStr, int year, int month, out bool isValid)
 	{
-		string [] vals = text.Split (sepChar);
-		string [] frm = format.Split (sepChar);
-		string [] date = { null, null, null };
+		bool canBeParsedToInt = int.TryParse (dayStr, out int day);
 
-		for (int i = 0; i < frm.Length; i++) {
-			if (frm [i].Contains ("M")) {
-				date [0] = vals [i].Trim ();
-			} else if (frm [i].Contains ("d")) {
-				date [1] = vals [i].Trim ();
-			} else {
-				string year = vals [i].Trim ();
-				if (year.GetRuneCount () == 2) {
-					string y = DateTime.Now.Year.ToString ();
-					date [2] = y.Substring (0, 2) + year.ToString ();
-				} else {
-					date [2] = vals [i].Trim ();
-				}
-			}
+		if (!canBeParsedToInt) {
+			isValid = false;
+			return 0;
 		}
-		return date [0] + sepChar + date [1] + sepChar + date [2];
+
+		if (day < 1) {
+			isValid = false;
+			return 1;
+		}
+
+		if (day > DateTime.DaysInMonth (year, month)) {
+			isValid = false;
+			return DateTime.DaysInMonth (year, month);
+		}
+
+		isValid = true;
+		return day;
 	}
 
-	int GetFormatIndex (string [] fm, string t)
+	private int ValidateMonth (string monthStr, out bool isValid)
 	{
-		int idx = -1;
-		for (int i = 0; i < fm.Length; i++) {
-			if (fm [i].Contains (t)) {
-				idx = i;
-				break;
-			}
+		bool canBeParsedToInt = int.TryParse (monthStr, out int month);
+
+		if (!canBeParsedToInt) {
+			isValid = false;
+			return 0;
 		}
-		return idx;
+
+		if (month < 1) {
+			isValid = false;
+			return 1;
+		}
+
+		if (month > 12) {
+			isValid = false;
+			return 12;
+		}
+
+		isValid = true;
+		return month;
 	}
+
+	private int ValidateYear (string yearStr, out bool isValid)
+	{
+		bool canBeParsedToInt = int.TryParse (yearStr, out int year);
+
+		if (!canBeParsedToInt) {
+			isValid = false;
+			return 0;
+		}
+
+		if (year < 1) {
+			isValid = false;
+			return 1;
+		}
+
+		if (year > 9999) {
+			isValid = false;
+			return 9999;
+		}
+
+		isValid = true;
+		return year;
+	}
+
+	string FormatYear (int year) =>
+	    (isShort, year.ToString ().Length) switch {
+		    (false, 2) => $"{DateTime.Now.Year,2:00}{year:00}",
+		    (false, 4) => $"{year:0000}",
+		    (true, 2) => $"{year:00}",
+		    (true, 4) => $"{year.ToString ().Substring (2, 2)}",
+		    _ => $"{year:0000}"
+	    };
 
 	void IncCursorPosition ()
 	{

@@ -41,7 +41,7 @@ namespace UICatalog.Scenarios {
 			shortDate.DateChanged += DateChanged;
 			Win.Add (shortDate);
 
-			var longDate = new DateField (DateTime.Now) {
+			var longDate = new DateField (DateTime.Now.AddDays (5)) {
 				X = Pos.Center (),
 				Y = Pos.Bottom (shortDate) + 1,
 				IsShortFormat = false,
@@ -54,7 +54,7 @@ namespace UICatalog.Scenarios {
 				X = Pos.Center (),
 				Y = Pos.Bottom (longDate) + 1,
 				TextAlignment = TextAlignment.Centered,
-				Width = Dim.Fill(),
+				Width = Dim.Fill (),
 			};
 			Win.Add (lblOldTime);
 
@@ -102,7 +102,7 @@ namespace UICatalog.Scenarios {
 				X = Pos.Center (),
 				Y = Pos.Bottom (Win) - 5,
 			};
-			swapButton.Clicked += (s,e) => {
+			swapButton.Clicked += (s, e) => {
 				longTime.ReadOnly = !longTime.ReadOnly;
 				shortTime.ReadOnly = !shortTime.ReadOnly;
 
